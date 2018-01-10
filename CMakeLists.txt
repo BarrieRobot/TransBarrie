@@ -6,7 +6,8 @@ project(${PROJECT_NAME} C CXX)
 set(${CMAKE_PROJECT_NAME}_SKETCH TransBarrie.ino)
 include(libs.cmake)
 
-#add_library(mylib )
+add_library(mylib )
+set_target_properties(mylib PROPERTIES LINKER_LANGUAGE CXX)
 
 #### Uncomment below additional settings as needed.
 set(${CMAKE_PROJECT_NAME}_BOARD mega)
