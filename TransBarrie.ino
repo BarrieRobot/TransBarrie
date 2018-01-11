@@ -11,6 +11,9 @@ void move_callback(const barrieduino::Move &message);
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response);
 
 /*/-- Definitions --/*/
+#define INTERRUPT_PIN_COLD 3
+#define INTERRUPT_PIN_HOTX 2
+#define INTERRUPT_PIN_HOTY 18
 
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
@@ -198,15 +201,27 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 
 }
 
-void switch_interrupt(){
-   nh.logerror("LOL");
+void interrupt_cold(){
+   nh.logerror("Cold Interrupt");
+}
+
+void interrupt_hot_x(){
+   nh.logerror("Hot X interrupt");
+}
+
+void interrupt_hot_y(){
+   nh.logerror("Hot Y interrupt");
 }
 
 void setup() {
     // Init LED 'cause why not?
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(3, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(3), switch_interrupt, FALLING);
+    pinMode(INTERRUPT_PIN_COLD, INPUT_PULLUP);
+    pinMode(INTERRUPT_PIN_HOTX, INPUT_PULLUP);
+    pinMode(INTERRUPT_PIN_HOTY, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_COLD), interrupt_cold, FALLING);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_HOTX), interrupt_hot_x, FALLING);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_HOTY), interrupt_hot_y, FALLING);
     digitalWrite(LED_BUILTIN, LOW);
 
     // Initiate USB serial connection used for ROS
