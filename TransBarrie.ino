@@ -5,8 +5,9 @@
 #include <ros.h>
 #include <std_srvs/Empty.h>
 #include <std_msgs/UInt16.h>
+#include <barrieduino/Move.h>
 
-void move_callback(const std_msgs::UInt16 &message);
+void move_callback(const barrieduino::Move &message);
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response);
 
 /*/-- Definitions --/*/
@@ -60,8 +61,48 @@ void ROS_init() {
     nh.advertiseService(zero_service);
 }
 
-void move_callback(const std_msgs::UInt16 &message) {
+void move_callback(const barrieduino::Move &message) {
     // TODO: Do stuff
+    // Hot drinks lane
+    if (message.lane == 1) {
+        switch (message.location) {
+            case 0:
+                // Go to cup dispenser
+                break;
+            case 1:
+                // Go to coffee machine
+                break;
+            case 2:
+                // Go to location just under the diaphragm
+                break;
+            case 3:
+                // Present drink
+                break;
+            default:
+                nh.logerror("message.location not in range 0-3.");
+        }
+    }
+    // Cold drink lane
+    else if (message.lane == 2) {
+        switch (message.location) {
+            case 0:
+                // Go to can drop height
+                break;
+            case 1:
+                // Go down so can will flip upright
+                break;
+            case 2:
+                // Go to location just under the diaphragm
+                break;
+            case 3:
+                // Present drink
+                break;
+            default:
+                nh.logerror("message.location not in range 0-3.");
+        }
+    } else {
+        nh.logerror("message.lane not properly specified.");
+    }
 }
 
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response) {
