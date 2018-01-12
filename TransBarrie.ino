@@ -139,120 +139,115 @@ void move_motor(int motor, int destination) {
   }
 }
 
-void move_callback(const barrieduino::Move &message) {
-    // Hot drinks lane
-    if (message.lane == 1) {
-        switch (message.location) {
-            case 0:
-                // Go to cup dispenser
-                // 2 step movement
-                if (currentHotYLoc == HotYLocation::present && currentHotXLoc == HotXLocation::xyswitch) {
-                  // Current location must be present and xyswitch
-                  // first move down
-                  move_motor(MOTOR_HOT_Y, (int)HotYLocation::restLocation);
-                  // then to cupDispenser
-                  move_motor(MOTOR_HOT_X, (int)HotXLocation::cupDispenser);
-                } else {
-                  char log_msg [100];
-                  char log_msg2 [100];
-                  sprintf(log_msg, "Want to go to cupDispenser, need to be at %d but I am at %d (hot x)", (int) HotXLocation::xyswitch, (int)currentHotXLoc);
-                  sprintf(log_msg2, "Want to go to cupDispenser, need to be at %d but I am at %d (hot y)", (int) HotYLocation::present, (int)currentHotYLoc);
-                  nh.logerror(log_msg);
-                  nh.logerror(log_msg2);;
-                }
-                break;
-            case 1:
-                // Go to coffee machine
-                if (currentHotXLoc == HotXLocation::cupDispenser) {
-                  // Current location must be cupdispenser
-                  move_motor(MOTOR_HOT_X, (int)HotXLocation::coffeeMachine);
-                } else {
-                  char log_msg [100];
-                  sprintf(log_msg, "Want cupdispenser, need to be at %d but I am at %d", (int) HotXLocation::cupDispenser, (int)currentHotXLoc);
-                  nh.logerror(log_msg);
-                }
-                break;
-            case 2:
-                // Go to location just under the diaphragm
-                // 2 step movement
-                if (currentHotXLoc == HotXLocation::coffeeMachine && currentHotYLoc == HotYLocation::restLocation) {
-                  // Current location must be coffeemachine
-                  move_motor(MOTOR_HOT_X, (int)HotXLocation::xyswitch);
+void log_error(char* desiredLocation, int requiredStart, int currentLocation) {
+  char log_msg [100];
+  sprintf(log_msg, "Want to go to %s, need to be at %d but I am at %d", desiredLocation, requiredStart, currentLocation);
+  nh.logerror(log_msg);
+}
 
-                  move_motor(MOTOR_HOT_Y, (int)HotYLocation::diaphragm);
-                } else {
-                  char log_msg [100];
-                  char log_msg2 [100];
-                  sprintf(log_msg, "Want to go to diaphragm, need to be at %d but I am at %d (hot x)", (int) HotXLocation::coffeeMachine, (int)currentHotXLoc);
-                  sprintf(log_msg2, "Want to go to diaphragm, need to be at %d but I am at %d (hot y)", (int) HotYLocation::restLocation, (int)currentHotYLoc);
-                  nh.logerror(log_msg);
-                  nh.logerror(log_msg2);
-                }
-                break;
-            case 3:
-                // Present drink
-                if (currentHotYLoc == HotYLocation::diaphragm) {
-                  // Current location must be diaphgragm
-                  move_motor(MOTOR_HOT_Y, (int)HotYLocation::present);
-                } else {
-                  char log_msg [100];
-                  sprintf(log_msg, "Want to go to present, need to be at %d but I am at %d", (int) HotYLocation::diaphragm, (int)currentHotYLoc);
-                  nh.logerror(log_msg);
-                }
-                break;
-            default:
-                nh.logerror("message.location not in range 0-3.");
+void move_hotdrink(int location) {
+  switch (location) {
+      case 0:
+          // Go to cup dispenser
+          // 2 step movement
+          if (currentHotYLoc == HotYLocation::present && currentHotXLoc == HotXLocation::xyswitch) {
+            // Current location must be present and xyswitch
+            // first move down
+            move_motor(MOTOR_HOT_Y, (int)HotYLocation::restLocation);
+            // then to cupDispenser
+            move_motor(MOTOR_HOT_X, (int)HotXLocation::cupDispenser);
+          } else {
+            log_error("cupDispenser (hotx)", (int) HotXLocation::xyswitch, (int)currentHotXLoc);
+            log_error("cupDispenser (hoty)", (int) HotYLocation::present, (int)currentHotYLoc);
+          }
+          break;
+      case 1:
+          // Go to coffee machine
+          if (currentHotXLoc == HotXLocation::cupDispenser) {
+            // Current location must be cupdispenser
+            move_motor(MOTOR_HOT_X, (int)HotXLocation::coffeeMachine);
+          } else {
+            log_error("coffeeMachine", (int) HotXLocation::cupDispenser, (int)currentHotXLoc);
+          }
+          break;
+      case 2:
+          // Go to location just under the diaphragm
+          // 2 step movement
+          if (currentHotXLoc == HotXLocation::coffeeMachine && currentHotYLoc == HotYLocation::restLocation) {
+            // Current location must be coffeemachine
+            // Go to the switch position on x axis
+            move_motor(MOTOR_HOT_X, (int)HotXLocation::xyswitch);
+            // Then move up y axis to under diaphragm
+            move_motor(MOTOR_HOT_Y, (int)HotYLocation::diaphragm);
+          } else {
+            log_error("diaphragm (hotx)", (int) HotXLocation::coffeeMachine, (int)currentHotXLoc);
+            log_error("diaphragm (hoty)", (int) HotYLocation::restLocation, (int)currentHotYLoc);
+          }
+          break;
+      case 3:
+          // Present drink
+          if (currentHotYLoc == HotYLocation::diaphragm) {
+            // Current location must be diaphgragm
+            move_motor(MOTOR_HOT_Y, (int)HotYLocation::present);
+          } else {
+            log_error("present", (int) HotYLocation::diaphragm, (int)currentHotYLoc);
+          }
+          break;
+      default:
+          nh.logerror("message.location not in range 0-3.");
+  }
+}
+
+void move_colddrink(int location) {
+  switch (location) {
+      case 0:
+        // Go to receive can height
+        if (currentColdLoc == ColdLocation::present) {
+          // Current location must be present
+          move_motor(MOTOR_COLD, (int)ColdLocation::receiveCanHeight);
+        } else {
+          log_error("receiveCanHeight", (int) ColdLocation::present, (int)currentColdLoc);
         }
-    }
-    // Cold drink lane
-    else if (message.lane == 2) {
-        switch (message.location) {
-            case 0:
-              if (currentColdLoc == ColdLocation::present) {
-                // Current location must be present
-                move_motor(MOTOR_COLD, (int)ColdLocation::receiveCanHeight);
-              } else {
-                char log_msg [100];
-                sprintf(log_msg, "Want to go to receiveCanHeight, need to be at %d but I am at %d", (int) ColdLocation::present, (int)currentColdLoc);
-                nh.logerror(log_msg);
-              }
-              break;
-            case 1:
-                // Go down so can will flip upright
-                if (currentColdLoc == ColdLocation::receiveCanHeight) {
-                  // Current location must be receiveCanHeight
-                  move_motor(MOTOR_COLD, (int)ColdLocation::canLockin);
-                } else {
-                  char log_msg [100];
-                  sprintf(log_msg, "Want to go to canLockin, need to be at %d but I am at %d", (int) ColdLocation::receiveCanHeight, (int)currentColdLoc);
-                  nh.logerror(log_msg);
-                }
-                break;
-            case 2:
-                // Go to location just under the diaphragm
-                if (currentColdLoc == ColdLocation::canLockin) {
-                  // Current location must be restLocation
-                  move_motor(MOTOR_COLD, (int)ColdLocation::diaphragm);
-                } else {
-                  char log_msg [100];
-                  sprintf(log_msg, "Want to go to diaphragm, need to be at %d but I am at %d", (int) ColdLocation::canLockin, (int)currentColdLoc);
-                  nh.logerror(log_msg);
-                }
-                break;
-            case 3:
-                // Present drink
-                if (currentColdLoc == ColdLocation::diaphragm) {
-                  // Current location must be diaphgragm
-                  move_motor(MOTOR_COLD, (int)ColdLocation::present);
-                } else {
-                  char log_msg [100];
-                  sprintf(log_msg, "Want to go to present, need to be at %d but I am at %d", (int) ColdLocation::diaphragm, (int)currentColdLoc);
-                  nh.logerror(log_msg);
-                }
-                break;
-            default:
-                nh.logerror("message.location not in range 0-3.");
-        }
+        break;
+      case 1:
+          // Go down so can will flip upright
+          if (currentColdLoc == ColdLocation::receiveCanHeight) {
+            // Current location must be receiveCanHeight
+            move_motor(MOTOR_COLD, (int)ColdLocation::canLockin);
+          } else {
+            log_error("canLockin", (int) ColdLocation::receiveCanHeight, (int)currentColdLoc);
+          }
+          break;
+      case 2:
+          // Go to location just under the diaphragm
+          if (currentColdLoc == ColdLocation::canLockin) {
+            // Current location must be restLocation
+            move_motor(MOTOR_COLD, (int)ColdLocation::diaphragm);
+          } else {
+            log_error("diaphragm", (int) ColdLocation::canLockin, (int)currentColdLoc);
+          }
+          break;
+      case 3:
+          // Present drink
+          if (currentColdLoc == ColdLocation::diaphragm) {
+            // Current location must be diaphgragm
+            move_motor(MOTOR_COLD, (int)ColdLocation::present);
+          } else {
+            log_error("present", (int) ColdLocation::diaphragm, (int)currentColdLoc);
+          }
+          break;
+      default:
+          nh.logerror("message.location not in range 0-3.");
+  }
+}
+
+void move_callback(const barrieduino::Move &message) {
+    if (message.lane == 1) {
+      // Hot drinks lane
+      move_hotdrink(message.location);
+    } else if (message.lane == 2) {
+      // Cold drink lane
+      move_colddrink(message.location);
     } else {
         nh.logerror("message.lane not properly specified.");
     }
@@ -260,11 +255,38 @@ void move_callback(const barrieduino::Move &message) {
 
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response) {
     // TODO: Move infinitely?
-  controller.rotate(-1000, // Hot x -> go toward coffee machine
-                    -1000, // Hot Y -> go fully down
-                    -1000 // Cold ->  go fully down
+  controller.rotate(-100000, // Hot x -> go toward coffee machine
+                    -100000, // Hot Y -> go fully down
+                    -100000 // Cold ->  go fully down
   );
+  nh.loginfo("Zeroed");
+  move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
+  move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
+  move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+}
 
+void setZero() {
+  controller.rotate(-10000, // Hot x -> go toward coffee machine
+                    -10000, // Hot Y -> go fully down
+                    -10000 // Cold ->  go fully down
+  );
+  nh.loginfo("Zeroed");
+  move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
+  move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
+  move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+}
+
+
+long debouncing_time = 1000; //Debouncing Time in Milliseconds
+volatile unsigned long last_micros_cold = 0;
+volatile unsigned long last_micros_hotx = 0;
+volatile unsigned long last_micros_hoty = 0;
+
+void debounce_interrupt_cold() {
+  if((long)(micros() - last_micros_cold) >= debouncing_time * 1000) {
+    interrupt_cold();
+    last_micros_cold = micros();
+  }
 }
 
 void interrupt_cold(){
@@ -276,10 +298,24 @@ void interrupt_cold(){
    currentColdLoc = ColdLocation::zeroLocation;
 }
 
+void debounce_interrupt_hot_x() {
+  if((long)(micros() - last_micros_hotx) >= debouncing_time * 1000) {
+    last_micros_hotx = micros();
+    interrupt_hot_x();
+  }
+}
+
 void interrupt_hot_x(){
    nh.logerror("Hot X interrupt");
-   stepper_hot_X.stop();
    currentHotXLoc = HotXLocation::zeroLocation;
+   stepper_hot_X.stop();
+}
+
+void debounce_interrupt_hot_y() {
+  if((long)(micros() - last_micros_hoty) >= debouncing_time * 1000) {
+    interrupt_hot_y();
+    last_micros_hoty = micros();
+  }
 }
 
 void interrupt_hot_y(){
@@ -295,9 +331,9 @@ void setup() {
     pinMode(INTERRUPT_PIN_COLD, INPUT_PULLUP);
     pinMode(INTERRUPT_PIN_HOTX, INPUT_PULLUP);
     pinMode(INTERRUPT_PIN_HOTY, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_COLD), interrupt_cold, FALLING);
-    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_HOTX), interrupt_hot_x, FALLING);
-    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_HOTY), interrupt_hot_y, FALLING);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_COLD), debounce_interrupt_cold, FALLING);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_HOTX), debounce_interrupt_hot_x, FALLING);
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_HOTY), debounce_interrupt_hot_y, FALLING);
     digitalWrite(LED_BUILTIN, LOW);
 
     // Initiate USB serial connection used for ROS
@@ -315,14 +351,12 @@ void setup() {
     // Initialise ROS, its subscribers, publishers and services
     ROS_init();
 
-    // Init locations to zero positions, ready to receive order
     //while(!nh.connected()) nh.spinOnce();
-    // controller.rotate(1000, 0, 0);
-
     //TODO remove inits
-    currentColdLoc = ColdLocation::receiveCanHeight;
-    currentHotYLoc = HotYLocation::restLocation;
-    currentHotXLoc = HotXLocation::cupDispenser;
+    //  setZero();
+    // currentColdLoc = ColdLocation::receiveCanHeight;
+    // currentHotYLoc = HotYLocation::restLocation;
+    // currentHotXLoc = HotXLocation::cupDispenser;
 
     nh.loginfo("Arduino: Startup complete");
 }
