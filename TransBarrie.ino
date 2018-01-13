@@ -99,6 +99,10 @@ HotYLocation currentHotYLoc; // Initialise when zeroed
 HotXLocation currentHotXLoc;
 ColdLocation currentColdLoc;
 
+bool moving_hotx = false;
+bool moving_hoty = false;
+bool moving_cold = false;
+
 void ROS_init() {
     // Initialise ROS node and add subscribe to topics
     nh.initNode();
@@ -112,31 +116,32 @@ long get_degrees(long movement_cm) {
 
 void move_motor(int motor, int destination) {
   char log_msg [100];
-  if (motor == MOTOR_HOT_X) {
+  if (motor == MOTOR_HOT_X && !moving_hotx) {
+    moving_hotx = true;
     stepper_hot_X.enable();
     long degrees = get_degrees(destination - (int)currentHotXLoc);
     sprintf(log_msg, "Moving Hot X %d degrees", degrees);
-    nh.loginfo(log_msg);
-    controller.rotate(degrees, 0l, 0l);
+    controller.startMove(degrees, 0l, 0l);
     currentHotXLoc = static_cast<HotXLocation>(destination);
-    stepper_hot_X.disable();
-  } else if (motor == MOTOR_HOT_Y) {
+    nh.loginfo(log_msg);
+  } else if (motor == MOTOR_HOT_Y&& !moving_hoty) {
+    moving_hoty = true;
     stepper_hot_Y.enable();
     long degrees = destination - (int)currentHotYLoc;
     sprintf(log_msg, "Moving Hot Y %d degrees", degrees);
-    nh.loginfo(log_msg);
-    controller.rotate(0l, degrees, 0l);
+    controller.startMove(0l, degrees, 0l);
     currentHotYLoc = static_cast<HotYLocation>(destination);
-    stepper_hot_X.disable();
-  } else if (motor == MOTOR_COLD) {
+    nh.loginfo(log_msg);
+  } else if (motor == MOTOR_COLD && !moving_cold) {
+    moving_cold = true;
     stepper_cold.enable();
     long degrees = destination - (int)currentColdLoc;
     sprintf(log_msg, "Moving Cold %d degrees", degrees);
-    nh.loginfo(log_msg);
-    controller.rotate(0l, 0l, degrees);
+    controller.startMove(0l, 0l, degrees);
     currentColdLoc = static_cast<ColdLocation>(destination);
-    stepper_hot_Y.disable();
+    nh.loginfo(log_msg);
   }
+}
 }
 
 void log_error(char* desiredLocation, int requiredStart, int currentLocation) {
@@ -363,9 +368,22 @@ void setup() {
 
 void loop() {
     // Do all necessary ROS synchronisations (at least once per 5 seconds)
-    nh.spinOnce();
+    unsigned wait_time_micros = controller.nextAction();
 
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(10);
-    digitalWrite(LED_BUILTIN, LOW);
+  // 0 wait time indicates the motor has stopped
+  if (wait_time_micros <= 0) {
+      controller.disable();
+      moving_cold = false;
+      moving_hoty  false;
+      moving_hotx = false;
+  }
+
+  // execute nh.spinOnce if we have enough time
+  if (wait_time_micros > 100){
+      nh.spinOnce();
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(10);
+      digitalWrite(LED_BUILTIN, LOW);
+}
+
 }
