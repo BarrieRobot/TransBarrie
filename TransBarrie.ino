@@ -48,7 +48,7 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 
 // If microstepping is set externally, make sure this matches the selected mode
 // 1=full step, 2=half step etc.
-#define MICROSTEPS 8
+#define MICROSTEPS 1
 
 #define PULLEY_DIA 2.5 // Pulley diameter in cm
 
@@ -74,15 +74,15 @@ enum class HotXLocation {
   zeroLocation = 0, // location near coffee machine,
   coffeeMachine = 20,
   cupDispenser = 40,
-  xyswitch = 100,
+  xyswitch = 50,
 };
 
 /* Hot Y axis, upwards is positive movement */
 enum class HotYLocation {
   zeroLocation = 0, // fully down
   restLocation = 5, // rest location above interrupt switch, may not be required
-  diaphragm = 70,
-  present = 100
+  diaphragm = 40,
+  present = 50
 };
 
 /* Cold Y axis movement, upwards is positive */
@@ -90,8 +90,8 @@ enum class ColdLocation {
   zeroLocation = 0, // farmost down
   canLockin = 5, // lockin location above interrupt switch, may not be required
   receiveCanHeight = 20,
-  diaphragm = 70,
-  present = 100
+  diaphragm = 40,
+  present = 50
 };
 
 /*/-- Code --/*/
@@ -141,7 +141,6 @@ void move_motor(int motor, int destination) {
     currentColdLoc = static_cast<ColdLocation>(destination);
     nh.loginfo(log_msg);
   }
-}
 }
 
 void log_error(char* desiredLocation, int requiredStart, int currentLocation) {
@@ -374,7 +373,7 @@ void loop() {
   if (wait_time_micros <= 0) {
       controller.disable();
       moving_cold = false;
-      moving_hoty  false;
+      moving_hoty = false;
       moving_hotx = false;
   }
 
@@ -385,5 +384,4 @@ void loop() {
       delay(10);
       digitalWrite(LED_BUILTIN, LOW);
 }
-
 }
