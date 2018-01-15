@@ -35,16 +35,16 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 #define MOTOR_DECEL 250
 
 // Cold drinks X direction motor
-#define DIR_HOT_X 8
-#define STEP_HOT_X 9
+#define DIR_HOT_X 9
+#define STEP_HOT_X 8
 
 // Warm drinks Y direction motor
-#define DIR_HOT_Y 6
-#define STEP_HOT_Y 7
+#define DIR_HOT_Y 7
+#define STEP_HOT_Y 6
 
 // Cold drinks motor
-#define DIR_COLD 4
-#define STEP_COLD 5
+#define DIR_COLD 5
+#define STEP_COLD 4
 
 // If microstepping is set externally, make sure this matches the selected mode
 // 1=full step, 2=half step etc.
@@ -72,24 +72,24 @@ ros::Subscriber<barrieduino::Move> movement_sub("barrie_movement", &move_callbac
 /* Hot X axis, towards user is positive movement */
 enum class HotXLocation {
   zeroLocation = 0, // location near coffee machine,
-  coffeeMachine = 20,
-  cupDispenser = 40,
-  xyswitch = 100,
+  coffeeMachine = 10,
+  cupDispenser = 25,
+  xyswitch = 60,
 };
 
 /* Hot Y axis, upwards is positive movement */
 enum class HotYLocation {
   zeroLocation = 0, // fully down
   restLocation = 5, // rest location above interrupt switch, may not be required
-  diaphragm = 70,
-  present = 100
+  diaphragm = 10,
+  present = 20
 };
 
 /* Cold Y axis movement, upwards is positive */
 enum class ColdLocation {
   zeroLocation = 0, // farmost down
-  canLockin = 5, // lockin location above interrupt switch, may not be required
-  receiveCanHeight = 20,
+  canLockin = 1, // lockin location above interrupt switch, may not be required
+  receiveCanHeight = 10,
   diaphragm = 70,
   present = 100
 };
@@ -103,6 +103,7 @@ void ROS_init() {
     // Initialise ROS node and add subscribe to topics
     nh.initNode();
     nh.subscribe(movement_sub);
+    // nh.Publisher();
     nh.advertiseService(zero_service);
 }
 
@@ -115,22 +116,26 @@ void move_motor(int motor, int destination) {
   if (motor == MOTOR_HOT_X) {
     stepper_hot_X.enable();
     long degrees = get_degrees(destination - (int)currentHotXLoc);
-    sprintf(log_msg, "Moving Hot X %d degrees", degrees);
+    sprintf(log_msg, "Moving Hot X %d degrees from %d to %d", degrees, (int)currentHotXLoc, (int)destination);
     nh.loginfo(log_msg);
     controller.rotate(degrees, 0l, 0l);
     currentHotXLoc = static_cast<HotXLocation>(destination);
+    sprintf(log_msg, "Location is now %d", (int)currentHotXLoc);
+    nh.loginfo(log_msg);
     stepper_hot_X.disable();
   } else if (motor == MOTOR_HOT_Y) {
     stepper_hot_Y.enable();
-    long degrees = destination - (int)currentHotYLoc;
-    sprintf(log_msg, "Moving Hot Y %d degrees", degrees);
+    long degrees = get_degrees(destination - (int)currentHotYLoc);
+    sprintf(log_msg, "Moving Hot Y %d degrees from %d to %d", degrees, (int)currentHotYLoc, (int)destination);
     nh.loginfo(log_msg);
     controller.rotate(0l, degrees, 0l);
     currentHotYLoc = static_cast<HotYLocation>(destination);
+    sprintf(log_msg, "Location is now %d", (int)currentHotYLoc);
+    nh.loginfo(log_msg);
     stepper_hot_X.disable();
   } else if (motor == MOTOR_COLD) {
     stepper_cold.enable();
-    long degrees = destination - (int)currentColdLoc;
+    long degrees = get_degrees(destination - (int)currentColdLoc);
     sprintf(log_msg, "Moving Cold %d degrees", degrees);
     nh.loginfo(log_msg);
     controller.rotate(0l, 0l, degrees);
@@ -254,24 +259,18 @@ void move_callback(const barrieduino::Move &message) {
 }
 
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response) {
-    // TODO: Move infinitely?
-  controller.rotate(-100000, // Hot x -> go toward coffee machine
-                    -100000, // Hot Y -> go fully down
-                    -100000 // Cold ->  go fully down
-  );
-  nh.loginfo("Zeroed");
-  move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
-  move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
-  move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+  setZero();
 }
 
 void setZero() {
+  nh.loginfo("Zeroing");
+  controller.enable();
   controller.rotate(-10000, // Hot x -> go toward coffee machine
                     -10000, // Hot Y -> go fully down
                     -10000 // Cold ->  go fully down
   );
   nh.loginfo("Zeroed");
-  move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
+  move_motor(MOTOR_HOT_X, (int) HotXLocation::cupDispenser);
   move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
   move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
 }
