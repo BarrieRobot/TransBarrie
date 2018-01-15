@@ -48,7 +48,7 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 
 // If microstepping is set externally, make sure this matches the selected mode
 // 1=full step, 2=half step etc.
-#define MICROSTEPS 1
+#define MICROSTEPS 8
 
 #define PULLEY_DIA 2.5 // Pulley diameter in cm
 
@@ -67,6 +67,9 @@ MultiDriver controller(stepper_hot_X, stepper_hot_Y, stepper_cold);
 ros::NodeHandle nh;
 ros::ServiceServer<std_srvs::Empty::Request, std_srvs::Empty::Response> zero_service("zeroRequest", &zeroRequest);
 ros::Subscriber<barrieduino::Move> movement_sub("barrie_movement", &move_callback);
+
+
+bool zeroing = false;
 
 /* Locations in cm */
 /* Hot X axis, towards user is positive movement */
@@ -259,11 +262,13 @@ void move_callback(const barrieduino::Move &message) {
 
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response) {
     // TODO: Move infinitely?
-  controller.rotate(-100000, // Hot x -> go toward coffee machine
+    zeroing = true;
+  controller.startMove(-100000, // Hot x -> go toward coffee machine
                     -100000, // Hot Y -> go fully down
                     -100000 // Cold ->  go fully down
   );
-  nh.loginfo("Zeroed");
+}
+void moveToRestPositions () {
   move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
   move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
   move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
@@ -295,11 +300,10 @@ void debounce_interrupt_cold() {
 
 void interrupt_cold(){
    nh.logerror("Cold Interrupt");
-   char log_msg [10];
-   sprintf(log_msg, "%d", (int)ColdLocation::canLockin);
-   nh.loginfo(log_msg);
    stepper_cold.stop();
    currentColdLoc = ColdLocation::zeroLocation;
+   moving_cold  = false;
+   move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
 }
 
 void debounce_interrupt_hot_x() {
@@ -313,6 +317,8 @@ void interrupt_hot_x(){
    nh.logerror("Hot X interrupt");
    currentHotXLoc = HotXLocation::zeroLocation;
    stepper_hot_X.stop();
+   moving_hotx = false;
+   move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
 }
 
 void debounce_interrupt_hot_y() {
@@ -325,8 +331,10 @@ void debounce_interrupt_hot_y() {
 void interrupt_hot_y(){
    nh.logerror("Hot Y interrupt");
    stepper_hot_Y.stop();
+   moving_hoty  = false;
    currentHotYLoc = HotYLocation::zeroLocation;
    //move_motor(MOTOR_HOT_Y, HotYLocation::restLocation);
+   move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
 }
 
 void setup() {
@@ -364,24 +372,32 @@ void setup() {
 
     nh.loginfo("Arduino: Startup complete");
 }
-
+unsigned count = 0;
 void loop() {
+  count++;
     // Do all necessary ROS synchronisations (at least once per 5 seconds)
     unsigned wait_time_micros = controller.nextAction();
+    unsigned wait_time_micros_x = stepper_hot_X.nextAction();
+    unsigned wait_time_micros_y = stepper_hot_Y.nextAction();
+    unsigned wait_time_micros_cold = stepper_cold.nextAction();
+
+    if (wait_time_micros_x <= 0) {
+      moving_hotx  = false;
+    }
+    if (wait_time_micros_y <= 0) {
+      moving_hoty  = false;
+    }
+    if (wait_time_micros_cold <= 0) {
+      moving_cold  = false;
+    }
+
 
   // 0 wait time indicates the motor has stopped
-  if (wait_time_micros <= 0) {
-      controller.disable();
-      moving_cold = false;
-      moving_hoty = false;
-      moving_hotx = false;
+  // if (zeroing && wait_time_micros <= 0) {
+  //   zeroing = false;
+  //   moveToRestPositions();
+  // }
+  if (count % 100 == 0) {
+    nh.spinOnce();
   }
-
-  // execute nh.spinOnce if we have enough time
-  if (wait_time_micros > 100){
-      nh.spinOnce();
-      digitalWrite(LED_BUILTIN, HIGH);
-      delay(10);
-      digitalWrite(LED_BUILTIN, LOW);
-}
 }
