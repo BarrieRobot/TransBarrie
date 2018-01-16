@@ -25,7 +25,7 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
 // Target RPM for hot drinks X axis motor
-#define MOTOR_HOT_X_RPM 120
+#define MOTOR_HOT_X_RPM 90
 // Target RPM for hot drinks Y axis motor
 #define MOTOR_HOT_Y_RPM 90
 // Target RPM for cold drinks motor
@@ -51,6 +51,7 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 #define MICROSTEPS 8
 
 #define PULLEY_DIA 2.5 // Pulley diameter in cm
+#define CIRCUMFERENCE (PULLEY_DIA * PI)
 
 // 2-wire basic config, microstepping is hardwired on the driver
 // Other drivers can be mixed and matched but must be configured individually
@@ -70,14 +71,23 @@ ros::Subscriber<barrieduino::Move> movement_sub("barrie_movement", &move_callbac
 
 
 bool zeroing = false;
+unsigned int count = 0;
+
+bool zero_x = false;
+bool zero_y = false;
+bool zero_c = false;
+
+bool delay_move1 = false;
+bool delay_move2 = false;
+
 
 /* Locations in cm */
 /* Hot X axis, towards user is positive movement */
 enum class HotXLocation {
   zeroLocation = 0, // location near coffee machine,
-  coffeeMachine = 3,
-  cupDispenser = 25,
-  xyswitch = 85,
+  coffeeMachine = 2,
+  cupDispenser = 23,
+  xyswitch = 99,
 };
 
 /* Hot Y axis, upwards is positive movement */
@@ -85,16 +95,16 @@ enum class HotYLocation {
   zeroLocation = 0, // fully down
   restLocation = 5, // rest location above interrupt switch, may not be required
   diaphragm = 20,
-  present = 28
+  present = 25
 };
 
 /* Cold Y axis movement, upwards is positive */
 enum class ColdLocation {
   zeroLocation = 0, // farmost down
-  canLockin = 1, // lockin location above interrupt switch, may not be required
-  receiveCanHeight = 7,
-  diaphragm = 20,
-  present = 28
+  canLockin = 2, // lockin location above interrupt switch, may not be required
+  receiveCanHeight = 10,
+  diaphragm = 50,
+  present = 60
 };
 
 /*/-- Code --/*/
@@ -113,8 +123,11 @@ void ROS_init() {
     nh.advertiseService(zero_service);
 }
 
-long get_degrees(long movement_cm) {
-  return 360 * movement_cm / (PULLEY_DIA * PI);
+float get_degrees(int movement_cm) {
+  // char buffer[200];
+  // sprintf(buffer, "Circumference = %.2f, 360 * cm = %.2f", CIRCUMFERENCE, (360.0 * static_cast<float>(movement_cm)));
+  // nh.loginfo(buffer);
+  return (360.0 * static_cast<float>(movement_cm)) / CIRCUMFERENCE;
 }
 
 void move_motor(int motor, int destination) {
@@ -122,25 +135,26 @@ void move_motor(int motor, int destination) {
   if (motor == MOTOR_HOT_X && !moving_hotx) {
     moving_hotx = true;
     stepper_hot_X.enable();
-    long degrees = get_degrees(destination - (int)currentHotXLoc);
-    sprintf(log_msg, "Moving Hot X %d degrees", degrees);
-    controller.startMove(degrees, 0l, 0l);
+    int distance = destination - (int)currentHotXLoc;
+    float degrees = get_degrees(distance);
+    sprintf(log_msg, "Moving Hot X %d degrees from %d to %d, distance %d", (int)degrees, (int)currentHotXLoc, destination, distance);
+    controller.startRotate(degrees, 0.0, 0.0);
     currentHotXLoc = static_cast<HotXLocation>(destination);
     nh.loginfo(log_msg);
   } else if (motor == MOTOR_HOT_Y&& !moving_hoty) {
     moving_hoty = true;
     stepper_hot_Y.enable();
-    long degrees = destination - (int)currentHotYLoc;
-    sprintf(log_msg, "Moving Hot Y %d degrees", degrees);
-    controller.startMove(0l, degrees, 0l);
+    float degrees = get_degrees(destination - (int)currentHotYLoc);
+    sprintf(log_msg, "Moving Hot Y %d degrees from %d to %d", (int)degrees, (int)currentHotYLoc, destination);
+    controller.startRotate(0.0, degrees, 0.0);
     currentHotYLoc = static_cast<HotYLocation>(destination);
     nh.loginfo(log_msg);
   } else if (motor == MOTOR_COLD && !moving_cold) {
     moving_cold = true;
     stepper_cold.enable();
-    long degrees = destination - (int)currentColdLoc;
+    float degrees = get_degrees(destination - (int)currentColdLoc);
     sprintf(log_msg, "Moving Cold %d degrees", degrees);
-    controller.startMove(0l, 0l, degrees);
+    controller.startRotate(0.0, 0.0, degrees);
     currentColdLoc = static_cast<ColdLocation>(destination);
     nh.loginfo(log_msg);
   }
@@ -162,7 +176,7 @@ void move_hotdrink(int location) {
             // first move down
             move_motor(MOTOR_HOT_Y, (int)HotYLocation::restLocation);
             // then to cupDispenser
-            move_motor(MOTOR_HOT_X, (int)HotXLocation::cupDispenser);
+            delay_move2 = true;
           } else {
             log_error("cupDispenser (hotx)", (int) HotXLocation::xyswitch, (int)currentHotXLoc);
             log_error("cupDispenser (hoty)", (int) HotYLocation::present, (int)currentHotYLoc);
@@ -183,9 +197,9 @@ void move_hotdrink(int location) {
           if (currentHotXLoc == HotXLocation::coffeeMachine && currentHotYLoc == HotYLocation::restLocation) {
             // Current location must be coffeemachine
             // Go to the switch position on x axis
+            delay_move1 = true;
             move_motor(MOTOR_HOT_X, (int)HotXLocation::xyswitch);
             // Then move up y axis to under diaphragm
-            move_motor(MOTOR_HOT_Y, (int)HotYLocation::diaphragm);
           } else {
             log_error("diaphragm (hotx)", (int) HotXLocation::coffeeMachine, (int)currentHotXLoc);
             log_error("diaphragm (hoty)", (int) HotYLocation::restLocation, (int)currentHotYLoc);
@@ -262,11 +276,12 @@ void move_callback(const barrieduino::Move &message) {
 
 void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Response &response) {
     // TODO: Move infinitely?
-    zeroing = true;
-  controller.startMove(-100000, // Hot x -> go toward coffee machine
-                    -100000, // Hot Y -> go fully down
-                    -100000 // Cold ->  go fully down
-  );
+  //   zeroing = true;
+  // controller.startRotate(-100000, // Hot x -> go toward coffee machine
+  //                   -100000, // Hot Y -> go fully down
+  //                   -100000 // Cold ->  go fully down
+  // );
+  setZero();
 }
 void moveToRestPositions () {
   move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
@@ -275,14 +290,38 @@ void moveToRestPositions () {
 }
 
 void setZero() {
-  controller.rotate(-10000, // Hot x -> go toward coffee machine
-                    -10000, // Hot Y -> go fully down
-                    -10000 // Cold ->  go fully down
+  zero_x = true;
+  zero_y = true;
+  zero_c = true;
+  long movex = -10000;
+  long movey = -10000;
+  long movecold = -10000;
+  if (digitalRead(INTERRUPT_PIN_HOTX) == LOW) {
+    nh.loginfo("HOTX ALREADY ZEROED");
+     movex = 0;
+     currentHotXLoc = HotXLocation::zeroLocation;
+     move_motor(MOTOR_HOT_X, (int) HotXLocation::cupDispenser);
+  }
+  if (digitalRead(INTERRUPT_PIN_HOTY) == LOW) {
+    nh.loginfo("HOTY ALREADY ZEROED");
+    movey = 0;
+    currentHotYLoc = HotYLocation::zeroLocation;
+    move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
+  }
+  if (digitalRead(INTERRUPT_PIN_COLD) == LOW) {
+    nh.loginfo("COLD ALREADY ZEROED");
+    movecold = 0;
+    currentColdLoc = ColdLocation::zeroLocation;
+    move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+  }
+  controller.startRotate(movex, // Hot x -> go toward coffee machine
+                    movey, // Hot Y -> go fully down
+                    movecold // Cold ->  go fully down
   );
-  nh.loginfo("Zeroed");
-  move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
-  move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
-  move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+  nh.loginfo("Zeroing...");
+  // move_motor(MOTOR_HOT_X, (int) HotXLocation::cupDispenser);
+  // move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
+  // move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
 }
 
 
@@ -299,11 +338,15 @@ void debounce_interrupt_cold() {
 }
 
 void interrupt_cold(){
+  if (zero_c) {
    nh.logerror("Cold Interrupt");
    stepper_cold.stop();
    currentColdLoc = ColdLocation::zeroLocation;
+   zero_c = false;
    moving_cold  = false;
    move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+   stepper_cold.setSpeedProfile(stepper_cold.LINEAR_SPEED, MOTOR_ACCEL, MOTOR_DECEL);
+ }
 }
 
 void debounce_interrupt_hot_x() {
@@ -314,11 +357,15 @@ void debounce_interrupt_hot_x() {
 }
 
 void interrupt_hot_x(){
+  if (zero_x){
    nh.logerror("Hot X interrupt");
    currentHotXLoc = HotXLocation::zeroLocation;
    stepper_hot_X.stop();
+   zero_x = false;
    moving_hotx = false;
-   move_motor(MOTOR_HOT_X, (int) HotXLocation::coffeeMachine);
+   move_motor(MOTOR_HOT_X, (int) HotXLocation::cupDispenser);
+   stepper_hot_X.setSpeedProfile(stepper_hot_X.LINEAR_SPEED, MOTOR_ACCEL, MOTOR_DECEL);
+ }
 }
 
 void debounce_interrupt_hot_y() {
@@ -329,12 +376,16 @@ void debounce_interrupt_hot_y() {
 }
 
 void interrupt_hot_y(){
+  if (zero_y) {
    nh.logerror("Hot Y interrupt");
    stepper_hot_Y.stop();
    moving_hoty  = false;
+   zero_y = false;
    currentHotYLoc = HotYLocation::zeroLocation;
    //move_motor(MOTOR_HOT_Y, HotYLocation::restLocation);
+   stepper_hot_Y.setSpeedProfile(stepper_hot_Y.LINEAR_SPEED, MOTOR_ACCEL, MOTOR_DECEL);
    move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
+ }
 }
 
 void setup() {
@@ -356,23 +407,22 @@ void setup() {
     stepper_hot_Y.begin(MOTOR_HOT_Y_RPM, MICROSTEPS);
     stepper_cold.begin(MOTOR_COLD_RPM, MICROSTEPS);
 
-    stepper_hot_X.setSpeedProfile(stepper_hot_X.LINEAR_SPEED, MOTOR_ACCEL, MOTOR_DECEL);
-    stepper_hot_Y.setSpeedProfile(stepper_hot_Y.LINEAR_SPEED, MOTOR_ACCEL, MOTOR_DECEL);
-    stepper_cold.setSpeedProfile(stepper_cold.LINEAR_SPEED, MOTOR_ACCEL, MOTOR_DECEL);
-
     // Initialise ROS, its subscribers, publishers and services
     ROS_init();
-
     //while(!nh.connected()) nh.spinOnce();
     //TODO remove inits
     //  setZero();
     // currentColdLoc = ColdLocation::receiveCanHeight;
     // currentHotYLoc = HotYLocation::restLocation;
     // currentHotXLoc = HotXLocation::cupDispenser;
-
+    while (!nh.connected()) {
+      nh.spinOnce();
+      delay(50);
+    }
+    setZero();
     nh.loginfo("Arduino: Startup complete");
 }
-unsigned count = 0;
+
 void loop() {
   count++;
     // Do all necessary ROS synchronisations (at least once per 5 seconds)
@@ -381,13 +431,39 @@ void loop() {
     unsigned wait_time_micros_y = stepper_hot_Y.nextAction();
     unsigned wait_time_micros_cold = stepper_cold.nextAction();
 
+    // if (zero_x && wait_time_micros_x <= 0) {
+    //   moving_hotx  = false;
+    //   zero_x = false;
+    //   move_motor(MOTOR_HOT_X, (int) HotXLocation::cupDispenser);
+    // } else
     if (wait_time_micros_x <= 0) {
       moving_hotx  = false;
+      stepper_hot_X.disable();
     }
+    if (wait_time_micros_x <= 0 && delay_move1) {
+      delay_move1 = false;
+      move_motor(MOTOR_HOT_Y, (int)HotYLocation::diaphragm);
+    }
+    // if (zero_y && wait_time_micros_y <= 0) {
+    //   moving_hoty  = false;
+    //   zero_y = false;
+    //   move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
+    // } else
     if (wait_time_micros_y <= 0) {
-      moving_hoty  = false;
+      moving_hoty = false;
+      stepper_hot_Y.disable();
     }
+    if (wait_time_micros_y <= 0 && delay_move2) {
+      delay_move2 = false;
+      move_motor(MOTOR_HOT_X, (int)HotXLocation::cupDispenser);
+    }
+    // if (zero_c && wait_time_micros_cold <= 0) {
+    //   moving_cold  = false;
+    //   zero_c = false;
+    //   move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
+    // } else
     if (wait_time_micros_cold <= 0) {
+      stepper_cold.disable();
       moving_cold  = false;
     }
 
@@ -397,7 +473,8 @@ void loop() {
   //   zeroing = false;
   //   moveToRestPositions();
   // }
-  if (count % 100 == 0) {
+  if (count % 10000 == 0) {
+    //nh.loginfo("ROSUpdate");
     nh.spinOnce();
   }
 }
