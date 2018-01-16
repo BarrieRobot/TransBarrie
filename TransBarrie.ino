@@ -35,16 +35,16 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 #define MOTOR_DECEL 250
 
 // Cold drinks X direction motor
-#define DIR_HOT_X 8
-#define STEP_HOT_X 9
+#define DIR_HOT_X 9
+#define STEP_HOT_X 8
 
 // Warm drinks Y direction motor
-#define DIR_HOT_Y 6
-#define STEP_HOT_Y 7
+#define DIR_HOT_Y 7
+#define STEP_HOT_Y 6
 
 // Cold drinks motor
-#define DIR_COLD 4
-#define STEP_COLD 5
+#define DIR_COLD 5
+#define STEP_COLD 4
 
 // If microstepping is set externally, make sure this matches the selected mode
 // 1=full step, 2=half step etc.
@@ -75,26 +75,26 @@ bool zeroing = false;
 /* Hot X axis, towards user is positive movement */
 enum class HotXLocation {
   zeroLocation = 0, // location near coffee machine,
-  coffeeMachine = 20,
-  cupDispenser = 40,
-  xyswitch = 50,
+  coffeeMachine = 3,
+  cupDispenser = 25,
+  xyswitch = 85,
 };
 
 /* Hot Y axis, upwards is positive movement */
 enum class HotYLocation {
   zeroLocation = 0, // fully down
   restLocation = 5, // rest location above interrupt switch, may not be required
-  diaphragm = 40,
-  present = 50
+  diaphragm = 20,
+  present = 28
 };
 
 /* Cold Y axis movement, upwards is positive */
 enum class ColdLocation {
   zeroLocation = 0, // farmost down
-  canLockin = 5, // lockin location above interrupt switch, may not be required
-  receiveCanHeight = 20,
-  diaphragm = 40,
-  present = 50
+  canLockin = 1, // lockin location above interrupt switch, may not be required
+  receiveCanHeight = 7,
+  diaphragm = 20,
+  present = 28
 };
 
 /*/-- Code --/*/
