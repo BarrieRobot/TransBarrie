@@ -12,8 +12,8 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 
 /*/-- Definitions --/*/
 #define INTERRUPT_PIN_COLD 3
-#define INTERRUPT_PIN_HOTX 2
-#define INTERRUPT_PIN_HOTY 18
+#define INTERRUPT_PIN_HOTX 18
+#define INTERRUPT_PIN_HOTY 19
 #define ENABLE_PIN_HOTX 10
 #define ENABLE_PIN_HOTY 10
 #define ENABLE_PIN_COLD 10
@@ -25,7 +25,7 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
 // Target RPM for hot drinks X axis motor
-#define MOTOR_HOT_X_RPM 90
+#define MOTOR_HOT_X_RPM 120
 // Target RPM for hot drinks Y axis motor
 #define MOTOR_HOT_Y_RPM 90
 // Target RPM for cold drinks motor
@@ -35,8 +35,8 @@ void zeroRequest(const std_srvs::Empty::Request &request, std_srvs::Empty::Respo
 #define MOTOR_DECEL 250
 
 // Cold drinks X direction motor
-#define DIR_HOT_X 9
-#define STEP_HOT_X 8
+#define DIR_HOT_X 11
+#define STEP_HOT_X 10
 
 // Warm drinks Y direction motor
 #define DIR_HOT_Y 7
@@ -95,7 +95,7 @@ enum class HotYLocation {
   zeroLocation = 0, // fully down
   restLocation = 5, // rest location above interrupt switch, may not be required
   diaphragm = 20,
-  present = 25
+  present = 26
 };
 
 /* Cold Y axis movement, upwards is positive */
@@ -134,7 +134,7 @@ void move_motor(int motor, int destination) {
   char log_msg [100];
   if (motor == MOTOR_HOT_X && !moving_hotx) {
     moving_hotx = true;
-    stepper_hot_X.enable();
+    //stepper_hot_X.enable();
     int distance = destination - (int)currentHotXLoc;
     float degrees = get_degrees(distance);
     sprintf(log_msg, "Moving Hot X %d degrees from %d to %d, distance %d", (int)degrees, (int)currentHotXLoc, destination, distance);
@@ -143,7 +143,7 @@ void move_motor(int motor, int destination) {
     nh.loginfo(log_msg);
   } else if (motor == MOTOR_HOT_Y&& !moving_hoty) {
     moving_hoty = true;
-    stepper_hot_Y.enable();
+    //stepper_hot_Y.enable();
     float degrees = get_degrees(destination - (int)currentHotYLoc);
     sprintf(log_msg, "Moving Hot Y %d degrees from %d to %d", (int)degrees, (int)currentHotYLoc, destination);
     controller.startRotate(0.0, degrees, 0.0);
@@ -151,7 +151,7 @@ void move_motor(int motor, int destination) {
     nh.loginfo(log_msg);
   } else if (motor == MOTOR_COLD && !moving_cold) {
     moving_cold = true;
-    stepper_cold.enable();
+  //  stepper_cold.enable();
     float degrees = get_degrees(destination - (int)currentColdLoc);
     sprintf(log_msg, "Moving Cold %d degrees", degrees);
     controller.startRotate(0.0, 0.0, degrees);
@@ -299,18 +299,21 @@ void setZero() {
   if (digitalRead(INTERRUPT_PIN_HOTX) == LOW) {
     nh.loginfo("HOTX ALREADY ZEROED");
      movex = 0;
+     zero_x = false;
      currentHotXLoc = HotXLocation::zeroLocation;
      move_motor(MOTOR_HOT_X, (int) HotXLocation::cupDispenser);
   }
   if (digitalRead(INTERRUPT_PIN_HOTY) == LOW) {
     nh.loginfo("HOTY ALREADY ZEROED");
     movey = 0;
+    zero_y = false;
     currentHotYLoc = HotYLocation::zeroLocation;
     move_motor(MOTOR_HOT_Y, (int) HotYLocation::restLocation);
   }
   if (digitalRead(INTERRUPT_PIN_COLD) == LOW) {
     nh.loginfo("COLD ALREADY ZEROED");
     movecold = 0;
+    zero_c = false;
     currentColdLoc = ColdLocation::zeroLocation;
     move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
   }
@@ -438,7 +441,7 @@ void loop() {
     // } else
     if (wait_time_micros_x <= 0) {
       moving_hotx  = false;
-      stepper_hot_X.disable();
+    //  stepper_hot_X.disable();
     }
     if (wait_time_micros_x <= 0 && delay_move1) {
       delay_move1 = false;
@@ -451,7 +454,7 @@ void loop() {
     // } else
     if (wait_time_micros_y <= 0) {
       moving_hoty = false;
-      stepper_hot_Y.disable();
+      //stepper_hot_Y.disable();
     }
     if (wait_time_micros_y <= 0 && delay_move2) {
       delay_move2 = false;
@@ -463,7 +466,7 @@ void loop() {
     //   move_motor(MOTOR_COLD, (int) ColdLocation::receiveCanHeight);
     // } else
     if (wait_time_micros_cold <= 0) {
-      stepper_cold.disable();
+    //  stepper_cold.disable();
       moving_cold  = false;
     }
 
@@ -473,7 +476,7 @@ void loop() {
   //   zeroing = false;
   //   moveToRestPositions();
   // }
-  if (count % 10000 == 0) {
+  if (count % 3000 == 0) {
     //nh.loginfo("ROSUpdate");
     nh.spinOnce();
   }
